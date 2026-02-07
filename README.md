@@ -1,15 +1,15 @@
 # TaskMesh
 
-TaskMesh is a high-throughput workflow orchestration service built with FastAPI, Redis Streams, and PostgreSQL. It is designed to provide reliable async task processing with strong delivery guarantees and auditable execution history.
+TaskMesh is a workflow orchestration service built with FastAPI, Redis Streams, and PostgreSQL. It accepts asynchronous jobs through an HTTP API, distributes work across worker consumers, and records execution state with durable idempotency controls.
 
-## Highlights
+## Key Features
 
-- Fast task ingestion API with idempotency-key support
-- Redis Streams consumer-group queueing model
-- Worker runtime with durable claim, process, and ack flow
-- Exactly-once business execution semantics via idempotency ledger
-- PostgreSQL-backed task, attempt, and audit persistence
-- Local one-command environment using Docker Compose
+- Task submission API with idempotency support
+- Redis Streams queueing with consumer group coordination
+- Worker runtime with pluggable handler registry
+- PostgreSQL-backed task and attempt persistence
+- Liveness and readiness health probes
+- Docker Compose stack for local development and demos
 
 ## Tech Stack
 
@@ -18,52 +18,33 @@ TaskMesh is a high-throughput workflow orchestration service built with FastAPI,
 - Redis Streams
 - PostgreSQL
 - SQLAlchemy + Alembic
+- Uvicorn
 - Pytest
 
-## Architecture
+## Architecture Overview
 
-1. API receives task requests and validates idempotency keys.
-2. Task metadata is persisted in PostgreSQL.
-3. Task events are published to a Redis Stream.
-4. Workers consume via Redis consumer groups.
-5. Worker execution is recorded in attempts and idempotency ledger tables.
-6. Task state transitions are stored durably for replay and auditability.
+1. Clients submit tasks through the API with a unique idempotency key.
+2. The API stores task metadata in PostgreSQL and publishes work to Redis Streams.
+3. Worker processes consume stream events, execute handlers, and persist outcomes.
+4. Task status and attempt history are queryable through the API.
 
-## Project Structure
+## Quick Start (Docker)
 
-```text
-TaskMesh/
-  app/
-    api/          # API routers and dependencies
-    core/         # config and logging
-    db/           # SQLAlchemy models and session
-    queue/        # Redis client, streams, producer
-    schemas/      # request/response models
-    services/     # application service layer
-    workers/      # worker engine and handlers
-  alembic/        # DB migration environment and versions
-  tests/          # API and worker tests
-  docker-compose.yml
-  pyproject.toml
-```
-
-## Quick Start
-
-### 1. Run the full stack
+Start PostgreSQL, Redis, API, and Worker:
 
 ```bash
 docker compose up --build
 ```
 
-### 2. Create a task
+Create a task:
 
 ```bash
 curl -X POST http://localhost:8000/tasks \
   -H "Content-Type: application/json" \
-  -d '{"task_type":"default","idempotency_key":"task-001","payload":{"value":42}}'
+  -d '{"task_type":"default","idempotency_key":"demo-1","payload":{"value":42}}'
 ```
 
-### 3. Check task status
+Fetch task details:
 
 ```bash
 curl http://localhost:8000/tasks/<task_id>
@@ -71,45 +52,59 @@ curl http://localhost:8000/tasks/<task_id>
 
 ## Local Development
 
-### Setup
+1. Install dependencies:
 
 ```bash
-pip install -e .[dev]
+pip install -e ".[dev]"
+```
+
+2. Create environment file:
+
+```bash
 copy .env.example .env
+```
+
+3. Apply migrations:
+
+```bash
 alembic upgrade head
 ```
 
-### Run API
+4. Start the API:
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-### Run worker
+5. Start the worker:
 
 ```bash
 python -m app.workers.main
 ```
 
-### Run tests
+6. Run tests:
 
 ```bash
-pytest -q
+pytest
 ```
 
 ## API Endpoints
 
-- `POST /tasks` - submit a task
-- `GET /tasks/{task_id}` - fetch task state and execution attempts
-- `GET /health/live` - liveness probe
-- `GET /health/ready` - readiness probe (DB + Redis)
+- POST /tasks: submit a task (idempotent by idempotency_key)
+- GET /tasks/{task_id}: retrieve task state and attempt history
+- GET /health/live: liveness probe
+- GET /health/ready: readiness probe (database and Redis)
 
-## Reliability Notes
+## Configuration
 
-- Duplicate submissions with the same `idempotency_key` are deduplicated.
-- Worker writes are persisted before final acknowledgement.
-- Execution outcomes are stored in `idempotency_ledger` for safe reuse.
+Default environment values are provided in [.env.example](.env.example).
 
-## License
-
-MIT
+- DATABASE_URL: async PostgreSQL connection string
+- SYNC_DATABASE_URL: sync PostgreSQL connection string for migrations/utilities
+- REDIS_URL: Redis connection string
+- TASK_STREAM_KEY: Redis stream key used for task events
+- TASK_CONSUMER_GROUP: Redis consumer group name
+- TASK_CONSUMER_NAME: worker identity
+- WORKER_BLOCK_MS: stream read block timeout
+- WORKER_BATCH_SIZE: max messages fetched per worker poll
+- LOG_LEVEL: application log level
