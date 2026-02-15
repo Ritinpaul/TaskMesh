@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.api.dependencies import get_task_service
 from app.schemas.tasks import (
+    TaskReplayRequest,
+    TaskReplayResponse,
     TaskAttemptResponse,
     TaskCreateRequest,
     TaskCreateResponse,
@@ -66,3 +68,11 @@ async def get_task(task_id: str, service: TaskService = Depends(get_task_service
         updated_at=task.updated_at,
         attempts=attempts,
     )
+
+
+@router.post("/replay", response_model=TaskReplayResponse)
+async def replay_tasks(
+    request: TaskReplayRequest,
+    service: TaskService = Depends(get_task_service),
+) -> TaskReplayResponse:
+    return await service.replay_tasks(request)

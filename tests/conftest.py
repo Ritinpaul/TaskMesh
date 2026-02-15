@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
+import fakeredis.aioredis
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
@@ -12,6 +13,7 @@ from app.db.base import Base
 from app.db.session import get_db_session
 from app.main import create_app
 from app.queue.producer import get_stream_producer
+from app.queue.redis_client import get_redis_client
 
 
 class FakeProducer:
@@ -26,6 +28,13 @@ class FakeProducer:
 @pytest.fixture
 def fake_producer() -> FakeProducer:
     return FakeProducer()
+
+
+@pytest_asyncio.fixture
+async def fake_redis() -> AsyncIterator[fakeredis.aioredis.FakeRedis]:
+    client = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    yield client
+    await client.aclose()
 
 
 @pytest_asyncio.fixture
@@ -47,6 +56,7 @@ async def test_session_factory(tmp_path: Path) -> AsyncIterator[async_sessionmak
 def client(
     test_session_factory: async_sessionmaker[AsyncSession],
     fake_producer: FakeProducer,
+    fake_redis: fakeredis.aioredis.FakeRedis,
 ) -> Iterator[TestClient]:
     app = create_app(enable_startup_tasks=False)
 
@@ -57,8 +67,12 @@ def client(
     async def override_producer() -> FakeProducer:
         return fake_producer
 
+    async def override_redis() -> fakeredis.aioredis.FakeRedis:
+        return fake_redis
+
     app.dependency_overrides[get_db_session] = override_db
     app.dependency_overrides[get_stream_producer] = override_producer
+    app.dependency_overrides[get_redis_client] = override_redis
 
     with TestClient(app) as test_client:
         yield test_client

@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     worker_block_ms: int = 5000
     worker_batch_size: int = 20
 
+    max_retry_attempts: int = 3
+    retry_base_delay_ms: int = 200
+    retry_max_delay_ms: int = 5000
+
+    circuit_breaker_failure_threshold: int = 5
+    circuit_breaker_recovery_timeout_ms: int = 10000
+
     log_level: str = "INFO"
 
 

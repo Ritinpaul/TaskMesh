@@ -44,3 +44,28 @@ class TaskDetailResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     attempts: list[TaskAttemptResponse]
+
+
+class TaskReplayRequest(BaseModel):
+    task_ids: list[str] = Field(min_length=1)
+    requested_by: str = Field(default="system", min_length=1, max_length=120)
+
+
+class TaskReplayResponse(BaseModel):
+    accepted_count: int
+    replayed_task_ids: list[str]
+
+
+class AuditGroupOffset(BaseModel):
+    group: str
+    consumers: int
+    pending: int
+    lag: int | None = None
+    last_delivered_id: str | None = None
+
+
+class AuditOffsetsResponse(BaseModel):
+    stream_key: str
+    stream_length: int
+    pending_count: int
+    groups: list[AuditGroupOffset]
