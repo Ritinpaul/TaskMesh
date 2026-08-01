@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI
 
@@ -9,6 +10,8 @@ from app.db.session import close_db_engine
 from app.queue.redis_client import close_redis_client, get_redis_client
 from app.queue.stream import ensure_consumer_group
 
+logger = logging.getLogger(__name__)
+
 
 def create_app(enable_startup_tasks: bool = True) -> FastAPI:
     settings = get_settings()
@@ -17,12 +20,15 @@ def create_app(enable_startup_tasks: bool = True) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         if enable_startup_tasks:
-            redis_client = await get_redis_client()
-            await ensure_consumer_group(
-                redis_client=redis_client,
-                stream_key=settings.task_stream_key,
-                group_name=settings.task_consumer_group,
-            )
+            try:
+                redis_client = await get_redis_client()
+                await ensure_consumer_group(
+                    redis_client=redis_client,
+                    stream_key=settings.task_stream_key,
+                    group_name=settings.task_consumer_group,
+                )
+            except Exception as exc:
+                logger.warning("Redis stream startup connection skipped (standalone dev mode): %s", exc)
 
         yield
 

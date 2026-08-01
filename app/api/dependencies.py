@@ -5,6 +5,8 @@ from app.db.session import get_db_session
 from app.queue.producer import StreamProducer, get_stream_producer
 from app.services.task_service import TaskService
 
+get_db = get_db_session
+
 
 async def get_task_service(
     db_session: AsyncSession = Depends(get_db_session),

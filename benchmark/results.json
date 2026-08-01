@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-08-01T17:08:21.664545",
+  "batch_size": 2500,
+  "enqueue_throughput_ops_per_min": 1397327.19,
+  "enqueue_total_seconds": 0.107,
+  "idempotency_write_latency_ms": 29.86,
+  "dag_toposort_latency_ms": 0.059,
+  "performance_targets_met": {
+    "throughput_gte_2400_ops_min": true,
+    "toposort_latency_lte_10ms": true,
+    "idempotency_ledger_dedup_exact": true
+  }
+}

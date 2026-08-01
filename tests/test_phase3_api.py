@@ -1,3 +1,5 @@
+import pytest
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
 from app.db.models import DeadLetterQueue, ReplayAudit, Task, TaskStatus
@@ -70,24 +72,28 @@ def test_replay_endpoint_requeues_dead_letter_task(client, fake_producer, test_s
     asyncio.run(verify_state())
 
 
-def test_audit_offsets_endpoint_returns_group_stats(client, fake_redis):
-    import asyncio
+@pytest.mark.asyncio
+async def test_audit_offsets_endpoint_returns_group_stats(fake_redis):
+    from app.main import create_app
+    from app.api.dependencies import get_db_session
+    from app.queue.redis_client import get_redis_client
 
-    async def seed_stream():
-        await ensure_consumer_group(
-            redis_client=fake_redis,
-            stream_key="taskmesh:tasks",
-            group_name="taskmesh-workers",
-        )
-        await fake_redis.xadd("taskmesh:tasks", {"task_id": "seed-task", "payload": "{}"})
+    await ensure_consumer_group(
+        redis_client=fake_redis,
+        stream_key="taskmesh:tasks",
+        group_name="taskmesh-workers",
+    )
+    await fake_redis.xadd("taskmesh:tasks", {"task_id": "seed-task", "payload": "{}"})
 
-    asyncio.run(seed_stream())
+    app = create_app(enable_startup_tasks=False)
+    app.dependency_overrides[get_redis_client] = lambda: fake_redis
 
-    response = client.get("/audit/offsets")
-    assert response.status_code == 200
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/audit/offsets")
+        assert response.status_code == 200
 
-    payload = response.json()
-    assert payload["stream_key"] == "taskmesh:tasks"
-    assert payload["stream_length"] >= 1
-    assert isinstance(payload["pending_count"], int)
-    assert isinstance(payload["groups"], list)
+        payload = response.json()
+        assert payload["stream_key"] == "taskmesh:tasks"
+        assert payload["stream_length"] >= 1
+        assert isinstance(payload["pending_count"], int)
+        assert isinstance(payload["groups"], list)

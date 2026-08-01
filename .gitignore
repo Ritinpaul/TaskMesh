@@ -24,6 +24,10 @@ env/
 htmlcov/
 .tox/
 
+# Node / Frontend
+frontend/node_modules/
+frontend/.next/
+
 # IDE & editor
 .vscode/
 .idea/

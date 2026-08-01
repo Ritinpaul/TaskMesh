@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -17,10 +17,49 @@ def utcnow() -> datetime:
 
 class TaskStatus(str, enum.Enum):
     QUEUED = "queued"
+    BLOCKED = "blocked"
     PROCESSING = "processing"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     DEAD_LETTER = "dead_letter"
+
+
+class WorkflowStatus(str, enum.Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class WorkflowRun(Base):
+    __tablename__ = "workflow_runs"
+
+    workflow_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    status: Mapped[WorkflowStatus] = mapped_column(
+        Enum(WorkflowStatus, name="workflow_status"),
+        default=WorkflowStatus.PENDING,
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False,
+    )
+
+    tasks: Mapped[list[Task]] = relationship(back_populates="workflow", cascade="all, delete-orphan")
+
+
+class TaskDependency(Base):
+    __tablename__ = "task_dependencies"
+
+    dependency_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    workflow_id: Mapped[str] = mapped_column(String(36), ForeignKey("workflow_runs.workflow_id", ondelete="CASCADE"))
+    parent_task_id: Mapped[str] = mapped_column(String(36), ForeignKey("tasks.task_id", ondelete="CASCADE"))
+    child_task_id: Mapped[str] = mapped_column(String(36), ForeignKey("tasks.task_id", ondelete="CASCADE"))
+    condition: Mapped[str] = mapped_column(String(32), default="SUCCESS", nullable=False)
 
 
 class Task(Base):
@@ -36,6 +75,9 @@ class Task(Base):
         default=TaskStatus.QUEUED,
         nullable=False,
     )
+    workflow_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("workflow_runs.workflow_id", ondelete="CASCADE"), nullable=True)
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     result_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     stream_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -48,6 +90,7 @@ class Task(Base):
         nullable=False,
     )
 
+    workflow: Mapped[WorkflowRun | None] = relationship(back_populates="tasks")
     attempts: Mapped[list[TaskAttempt]] = relationship(
         back_populates="task",
         cascade="all, delete-orphan",

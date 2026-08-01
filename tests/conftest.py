@@ -52,6 +52,12 @@ async def test_session_factory(tmp_path: Path) -> AsyncIterator[async_sessionmak
     await engine.dispose()
 
 
+@pytest_asyncio.fixture
+async def db_session(test_session_factory: async_sessionmaker[AsyncSession]) -> AsyncIterator[AsyncSession]:
+    async with test_session_factory() as session:
+        yield session
+
+
 @pytest.fixture
 def client(
     test_session_factory: async_sessionmaker[AsyncSession],
